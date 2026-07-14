@@ -15,5 +15,7 @@ Initial release.
 - `pwResourceDir` for locating bundled assets.
 - `tools/pack-macos.sh` — package into a standalone `.app`, optionally bundling
   the `node` runtime and web assets.
-- POSIX fallback (Linux) for the process/port pieces; native window is
-  macOS-only for now. WebKitGTK / WebView2 backends planned.
+- Backends for all three desktop platforms: macOS (`WKWebView`), Linux
+  (WebKitGTK), Windows (Edge WebView2). macOS is verified end-to-end; the Linux
+  and Windows backends are written against their platform APIs but not yet
+  compile-tested on-target.

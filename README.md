@@ -87,10 +87,31 @@ cd examples/hello && ./run.sh
 
 ## Platforms
 
-- **macOS** — full support (Cocoa + WebKit / `WKWebView`).
-- **Linux / Windows** — the sidecar-process and wait-for-port pieces work, but
-  the native window is macOS-only in this release. WebKitGTK (Linux) and
-  WebView2 (Windows) backends are planned.
+The same API works on all three desktop platforms; each uses the OS's own
+webview, so there's no bundled browser.
+
+| Platform | Webview | Native shim |
+|----------|---------|-------------|
+| macOS    | `WKWebView` (Cocoa + WebKit) | `native/positron_macos.m` |
+| Linux    | WebKitGTK (GTK 3)           | `native/positron_linux.c` |
+| Windows  | Microsoft Edge WebView2     | `native/positron_win32.c` |
+
+**Build requirements**
+
+- **macOS** — nothing extra; the Cocoa/WebKit frameworks ship with the OS.
+- **Linux** — GTK 3 + WebKitGTK development packages, e.g.
+  `sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev` (or `-4.0-dev`). Link
+  flags are resolved with `pkg-config` automatically.
+- **Windows** — the [WebView2 SDK](https://developer.microsoft.com/microsoft-edge/webview2/)
+  header (`WebView2.h`) on `C_INCLUDE_PATH` at build time, and at runtime the
+  Edge WebView2 runtime (preinstalled on current Windows 10/11) plus
+  `WebView2Loader.dll` (resolved dynamically — no import library needed).
+
+> Testing status: the macOS backend is verified end-to-end (window + Node
+> sidecar + `.app` packaging). The Linux and Windows backends are written to
+> the respective platform APIs but were authored on macOS and have **not** been
+> compile-tested on their targets yet — expect to build them on a real
+> Linux/Windows box first. Packaging (`tools/pack-macos.sh`) is macOS-only.
 
 ## License
 
