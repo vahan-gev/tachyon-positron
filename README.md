@@ -24,8 +24,35 @@ function main(): void {
 # Tachyon.toml
 [package]
 name = "my-app"
-deps = ["git+https://github.com/vahan-gev/tachyon-positron#v0.1.0"]
+deps = ["git+https://github.com/vahan-gev/tachyon-positron#v0.3.0"]
 ```
+
+## CLI
+
+`cli/` is a small command-line tool (itself written in Tachyon) that scaffolds,
+builds, runs, and packages Positron apps — no shell scripts needed. Build it
+once and put it on your PATH:
+
+```bash
+cd cli && tachyon build --release
+cp target/release/positron ~/bin/          # or anywhere on your PATH
+```
+
+Then:
+
+```bash
+positron new myapp --node   # scaffold (omit --node for a plain HTML app)
+cd myapp
+positron run                # build + open the window
+positron pack --sign -      # build a signed macOS .app (auto-bundles node + assets)
+```
+
+| Command | What it does |
+|---------|--------------|
+| `positron new <name> [--node]` | Scaffold a new app (HTML, or Node-backed with a `server.js`) |
+| `positron build` | Compile the current app (release) |
+| `positron run` | Build, then open the app window |
+| `positron pack [--name --sign --icon --out]` | Build a signed macOS `.app`, bundling `server.js`/`web` + `node` |
 
 ## API
 

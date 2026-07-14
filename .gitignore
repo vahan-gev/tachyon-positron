@@ -2,3 +2,5 @@ target/
 Tachyon.lock
 examples/*/target/
 examples/*/Tachyon.lock
+cli/target/
+cli/Tachyon.lock

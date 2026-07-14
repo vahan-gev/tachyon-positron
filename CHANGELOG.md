@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0
+
+- **`positron` CLI** (`cli/`, written in Tachyon) so you don't need shell
+  scripts:
+  - `positron new <name> [--node]` — scaffold an app (HTML, or a Node-backed
+    template with a `server.js`).
+  - `positron build` — compile the current app (release).
+  - `positron run` — build, then open the app window.
+  - `positron pack [--name --sign --icon --out]` — build a signed macOS `.app`,
+    auto-bundling `server.js` / `web` and a `node` runtime when present.
+  Uses only Tachyon built-ins (`shell`, `args`, file I/O) — no external deps.
+
 ## 0.2.1
 
 - Windows packager now embeds `-Icon` into the `.exe` via `rcedit` (when it's on

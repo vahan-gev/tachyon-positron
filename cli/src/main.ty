@@ -1,0 +1,254 @@
+// positron — a small CLI to scaffold, build, run, and package Positron apps,
+// so you don't need shell scripts. Written entirely in Tachyon: it uses the
+// built-in shell() / file / args helpers, nothing external.
+
+static VERSION: string = "0.3.0";
+static LIB_TAG: string = "v0.3.0";
+
+function tachyonBin(): string {
+    let t = envGet("TACHYON");
+    if (t.len() > 0L) { return t; }
+    return "tachyon";
+}
+
+// Run a command through the system shell; print its output; return exit code.
+function runCmd(cmd: string): int {
+    let out = shell(`${cmd} 2>&1`);
+    if (out.len() > 0L) { print(out); }
+    return shellStatus() as int;
+}
+
+// The package name from ./Tachyon.toml (also the built binary's name).
+function projectName(): string {
+    if (!fileExists("Tachyon.toml")) { return ""; }
+    let toml = readFile("Tachyon.toml");
+    for (line in toml.lines()) {
+        let t = line.trim();
+        if (t.startsWith("name")) {
+            let dq = "\"";
+            let q = t.indexOf(dq);
+            if (q >= 0L) {
+                let rest = t.sub(q + 1L, t.len());
+                let q2 = rest.indexOf(dq);
+                if (q2 >= 0L) { return rest.sub(0L, q2); }
+            }
+        }
+    }
+    return "";
+}
+
+// ---------- templates ----------
+
+function tomlTemplate(name: string): string {
+    return `[package]
+name = "${name}"
+version = "0.1.0"
+deps = ["git+https://github.com/vahan-gev/tachyon-positron#${LIB_TAG}"]
+`;
+}
+
+function mainHtmlTemplate(name: string): string {
+    return `import positron.app;
+
+function main(): void {
+    let html = "<!doctype html><meta charset=utf-8>"
+        + "<title>${name}</title>"
+        + "<style>body{margin:0;font-family:-apple-system,system-ui,sans-serif;"
+        + "background:#0e0e10;color:#f1f0ee;display:grid;place-items:center;height:100vh}"
+        + "h1{font-size:42px;margin:0 0 8px}p{color:#8d8b86;margin:0}</style>"
+        + "<div style='text-align:center'><h1>${name}</h1>"
+        + "<p>Your Positron app is running.</p></div>";
+    pwInit("${name}", 900, 640);
+    pwLoadHTML(html);
+    pwRun();
+}
+`;
+}
+
+function mainNodeTemplate(name: string): string {
+    return `import positron.app;
+
+function main(): void {
+    // Start the Node server (server.js), wait for it, and show it in a window.
+    let ok = pwServe("${name}", 1000, 700, "node server.js", "127.0.0.1", 4321, 30000);
+    if (!ok) { eprintln("failed to start the Node server"); }
+}
+`;
+}
+
+function serverJsTemplate(): string {
+    return `const http = require("http");
+const PORT = process.env.PORT || 4321;
+http.createServer((req, res) => {
+  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+  res.end(
+    "<!doctype html><meta charset=utf-8><title>Positron App</title>" +
+    "<style>body{margin:0;font-family:system-ui,sans-serif;background:#0e0e10;" +
+    "color:#f1f0ee;display:grid;place-items:center;height:100vh}p{color:#8d8b86}</style>" +
+    "<div style='text-align:center'><h1>It works</h1>" +
+    "<p>Served by Node " + process.version + "</p></div>"
+  );
+}).listen(PORT, "127.0.0.1", () => console.log("server on http://127.0.0.1:" + PORT));
+`;
+}
+
+// ---------- commands ----------
+
+function cmdNew(a: Vec<string>): void {
+    if (a.len() < 2L) { eprintln("usage: positron new <name> [--node]"); exit(1); }
+    let name = a[1];
+    let node = a.contains("--node");
+    if (fileExists(name)) { eprintln(`'${name}' already exists`); exit(1); }
+    createDir(name);
+    createDir(`${name}/src`);
+    writeFile(`${name}/Tachyon.toml`, tomlTemplate(name));
+    if (node) {
+        writeFile(`${name}/server.js`, serverJsTemplate());
+        writeFile(`${name}/src/main.ty`, mainNodeTemplate(name));
+    } else {
+        writeFile(`${name}/src/main.ty`, mainHtmlTemplate(name));
+    }
+    println(`Created ${name}`);
+    println("");
+    println(`  cd ${name}`);
+    println("  positron run");
+}
+
+function cmdBuild(): void {
+    println("Building (release)…");
+    let rc = runCmd(`${tachyonBin()} build --release`);
+    if (rc != 0) { exit(rc); }
+    println("Built.");
+}
+
+function cmdRun(): void {
+    let rc = runCmd(`${tachyonBin()} build --release`);
+    if (rc != 0) { exit(rc); }
+    let name = projectName();
+    if (name.len() == 0L) {
+        eprintln("no Tachyon.toml here — run inside a project (or 'positron new').");
+        exit(1);
+    }
+    let bin = `./target/release/${name}`;
+    if (!fileExists(bin)) { eprintln(`built binary not found: ${bin}`); exit(1); }
+    println(`Running ${name} — close the window to stop.`);
+    exit(runCmd(bin));
+}
+
+function launcherScript(name: string): string {
+    return `#!/bin/bash
+DIR="$(cd "$(dirname "$0")" && pwd)"
+export PATH="$DIR/../Resources/bin:$PATH"
+cd "$DIR/../Resources" 2>/dev/null || true
+exec "$DIR/${name}-bin" "$@"
+`;
+}
+
+function infoPlist(name: string, iconKey: string): string {
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>${name}</string>
+  <key>CFBundleDisplayName</key><string>${name}</string>
+  <key>CFBundleExecutable</key><string>${name}</string>
+  <key>CFBundleIdentifier</key><string>com.positron.app</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>LSMinimumSystemVersion</key><string>10.13</string>
+${iconKey}  <key>NSAppTransportSecurity</key>
+  <dict><key>NSAllowsLocalNetworking</key><true/></dict>
+</dict>
+</plist>
+`;
+}
+
+function cmdPack(a: Vec<string>): void {
+    let rc = runCmd(`${tachyonBin()} build --release`);
+    if (rc != 0) { exit(rc); }
+    let proj = projectName();
+    if (proj.len() == 0L) { eprintln("no Tachyon.toml here."); exit(1); }
+
+    let name = proj;
+    let sign = "";
+    let icon = "";
+    let out = ".";
+    let i = 1L;
+    while (i < a.len()) {
+        let f = a[i];
+        if (f == "--name") { i = i + 1L; name = a[i]; }
+        else if (f == "--sign") { i = i + 1L; sign = a[i]; }
+        else if (f == "--icon") { i = i + 1L; icon = a[i]; }
+        else if (f == "--out") { i = i + 1L; out = a[i]; }
+        i = i + 1L;
+    }
+
+    let bin = `./target/release/${proj}`;
+    if (!fileExists(bin)) { eprintln(`binary not found: ${bin}`); exit(1); }
+
+    let app = `${out}/${name}.app`;
+    let macos = `${app}/Contents/MacOS`;
+    let res = `${app}/Contents/Resources`;
+    println(`Packaging ${app}…`);
+    runCmd(`rm -rf "${app}"`);
+    runCmd(`mkdir -p "${macos}" "${res}"`);
+    runCmd(`cp "${bin}" "${macos}/${name}-bin"`);
+    runCmd(`chmod +x "${macos}/${name}-bin"`);
+    writeFile(`${macos}/${name}`, launcherScript(name));
+    runCmd(`chmod +x "${macos}/${name}"`);
+
+    // auto-bundle app assets that sit next to the project
+    if (fileExists("server.js")) { runCmd(`cp "server.js" "${res}/"`); }
+    if (isDir("web")) { runCmd(`cp -R "web" "${res}/"`); }
+    if (isDir("public")) { runCmd(`cp -R "public" "${res}/"`); }
+
+    // bundle node for node-based apps so the .app is self-contained
+    let needsNode = fileExists("server.js") || isDir("web");
+    if (needsNode) {
+        runCmd(`mkdir -p "${res}/bin"`);
+        let nrc = runCmd(`cp "$(command -v node)" "${res}/bin/node"`);
+        if (nrc != 0) { println("  note: node not found on PATH; not bundled"); }
+    }
+
+    let iconKey = "";
+    if (icon.len() > 0L) {
+        runCmd(`cp "${icon}" "${res}/AppIcon.icns"`);
+        iconKey = "  <key>CFBundleIconFile</key><string>AppIcon</string>\n";
+    }
+    writeFile(`${app}/Contents/Info.plist`, infoPlist(name, iconKey));
+
+    if (sign.len() > 0L) {
+        println(`Signing (${sign})…`);
+        if (needsNode) { runCmd(`codesign --force --sign "${sign}" "${res}/bin/node"`); }
+        runCmd(`codesign --force --sign "${sign}" "${macos}/${name}-bin"`);
+        runCmd(`codesign --force --sign "${sign}" "${app}"`);
+    }
+    println(`Done: ${app}`);
+}
+
+function help(): void {
+    println("positron — create, run, and package Positron desktop apps");
+    println("");
+    println("Usage:");
+    println("  positron new <name> [--node]   scaffold a new app (--node adds a Node server)");
+    println("  positron build                 compile the current app (release)");
+    println("  positron run                   build, then open the app window");
+    println("  positron pack [opts]           build a macOS .app (auto-bundles server.js/web + node)");
+    println("  positron version");
+    println("");
+    println("pack options:  --name <title>   --sign <identity>   --icon <file.icns>   --out <dir>");
+}
+
+function main(): void {
+    let a = args();
+    if (a.len() == 0L) { help(); return; }
+    let cmd = a[0];
+    if (cmd == "new") { cmdNew(a); }
+    else if (cmd == "build") { cmdBuild(); }
+    else if (cmd == "run") { cmdRun(); }
+    else if (cmd == "pack") { cmdPack(a); }
+    else if (cmd == "help" || cmd == "--help" || cmd == "-h") { help(); }
+    else if (cmd == "version" || cmd == "--version" || cmd == "-v") { println(`positron ${VERSION}`); }
+    else { eprintln(`unknown command: ${cmd}`); help(); exit(1); }
+}
