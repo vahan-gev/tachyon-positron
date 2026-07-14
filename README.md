@@ -24,7 +24,7 @@ function main(): void {
 # Tachyon.toml
 [package]
 name = "my-app"
-deps = ["git+https://github.com/vahan-gev/tachyon-positron#v0.3.0"]
+deps = ["git+https://github.com/vahan-gev/tachyon-positron#v0.3.1"]
 ```
 
 ## CLI

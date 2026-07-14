@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.1
+
+- CLI output follows standard conventions: `error:` / `warning:` diagnostics on
+  stderr, a structured `USAGE` / `COMMANDS` / `PACK OPTIONS` help block, and
+  plain ASCII throughout. Internal steps (file copies, `codesign`) run quietly
+  instead of leaking tool chatter, so `pack` reports only what it bundled.
+- `positron build` / `run` / `pack` now report a clear diagnostic when run
+  outside a project.
+
 ## 0.3.0
 
 - **`positron` CLI** (`cli/`, written in Tachyon) so you don't need shell

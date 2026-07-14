@@ -1,9 +1,9 @@
-// positron — a small CLI to scaffold, build, run, and package Positron apps,
-// so you don't need shell scripts. Written entirely in Tachyon: it uses the
-// built-in shell() / file / args helpers, nothing external.
+// positron - command-line tool to create, build, run, and package Positron
+// apps. Written entirely in Tachyon: it uses the built-in shell() / file /
+// args helpers, nothing external.
 
-static VERSION: string = "0.3.0";
-static LIB_TAG: string = "v0.3.0";
+static VERSION: string = "0.3.1";
+static LIB_TAG: string = "v0.3.1";
 
 function tachyonBin(): string {
     let t = envGet("TACHYON");
@@ -11,10 +11,16 @@ function tachyonBin(): string {
     return "tachyon";
 }
 
-// Run a command through the system shell; print its output; return exit code.
+// Run a command, forwarding its output. Returns the exit code.
 function runCmd(cmd: string): int {
     let out = shell(`${cmd} 2>&1`);
     if (out.len() > 0L) { print(out); }
+    return shellStatus() as int;
+}
+
+// Run a command silently (internal file operations). Returns the exit code.
+function runQuiet(cmd: string): int {
+    shell(`${cmd} 2>&1`);
     return shellStatus() as int;
 }
 
@@ -37,6 +43,17 @@ function projectName(): string {
     return "";
 }
 
+// Resolve the current project, or exit with a diagnostic.
+function requireProject(): string {
+    let name = projectName();
+    if (name.len() == 0L) {
+        eprintln("error: no Tachyon.toml in the current directory");
+        eprintln("       run this inside a project, or create one with 'positron new <name>'");
+        exit(1);
+    }
+    return name;
+}
+
 // ---------- templates ----------
 
 function tomlTemplate(name: string): string {
@@ -57,7 +74,7 @@ function main(): void {
         + "background:#0e0e10;color:#f1f0ee;display:grid;place-items:center;height:100vh}"
         + "h1{font-size:42px;margin:0 0 8px}p{color:#8d8b86;margin:0}</style>"
         + "<div style='text-align:center'><h1>${name}</h1>"
-        + "<p>Your Positron app is running.</p></div>";
+        + "<p>Edit src/main.ty to get started.</p></div>";
     pwInit("${name}", 900, 640);
     pwLoadHTML(html);
     pwRun();
@@ -69,69 +86,81 @@ function mainNodeTemplate(name: string): string {
     return `import positron.app;
 
 function main(): void {
-    // Start the Node server (server.js), wait for it, and show it in a window.
+    // Start the Node server (server.js), wait for it, then show it in a window.
     let ok = pwServe("${name}", 1000, 700, "node server.js", "127.0.0.1", 4321, 30000);
-    if (!ok) { eprintln("failed to start the Node server"); }
+    if (!ok) { eprintln("error: the Node server did not start on port 4321"); }
 }
 `;
 }
 
-function serverJsTemplate(): string {
+function serverJsTemplate(name: string): string {
     return `const http = require("http");
 const PORT = process.env.PORT || 4321;
+
 http.createServer((req, res) => {
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
   res.end(
-    "<!doctype html><meta charset=utf-8><title>Positron App</title>" +
-    "<style>body{margin:0;font-family:system-ui,sans-serif;background:#0e0e10;" +
-    "color:#f1f0ee;display:grid;place-items:center;height:100vh}p{color:#8d8b86}</style>" +
-    "<div style='text-align:center'><h1>It works</h1>" +
-    "<p>Served by Node " + process.version + "</p></div>"
+    "<!doctype html><meta charset=utf-8><title>${name}</title>" +
+    "<style>body{margin:0;font-family:-apple-system,system-ui,sans-serif;" +
+    "background:#0e0e10;color:#f1f0ee;display:grid;place-items:center;height:100vh}" +
+    "h1{font-size:42px;margin:0 0 8px}p{color:#8d8b86;margin:0}</style>" +
+    "<div style='text-align:center'><h1>${name}</h1>" +
+    "<p>Served by Node " + process.version + ". Edit server.js to get started.</p></div>"
   );
-}).listen(PORT, "127.0.0.1", () => console.log("server on http://127.0.0.1:" + PORT));
+}).listen(PORT, "127.0.0.1", () => console.log("listening on http://127.0.0.1:" + PORT));
 `;
 }
 
 // ---------- commands ----------
 
 function cmdNew(a: Vec<string>): void {
-    if (a.len() < 2L) { eprintln("usage: positron new <name> [--node]"); exit(1); }
+    if (a.len() < 2L) {
+        eprintln("error: missing project name");
+        eprintln("usage: positron new <name> [--node]");
+        exit(1);
+    }
     let name = a[1];
     let node = a.contains("--node");
-    if (fileExists(name)) { eprintln(`'${name}' already exists`); exit(1); }
+    if (fileExists(name)) {
+        eprintln(`error: '${name}' already exists`);
+        exit(1);
+    }
     createDir(name);
     createDir(`${name}/src`);
     writeFile(`${name}/Tachyon.toml`, tomlTemplate(name));
     if (node) {
-        writeFile(`${name}/server.js`, serverJsTemplate());
+        writeFile(`${name}/server.js`, serverJsTemplate(name));
         writeFile(`${name}/src/main.ty`, mainNodeTemplate(name));
     } else {
         writeFile(`${name}/src/main.ty`, mainHtmlTemplate(name));
     }
-    println(`Created ${name}`);
+
+    if (node) {
+        println(`Created ${name} (Node.js template)`);
+    } else {
+        println(`Created ${name} (HTML template)`);
+    }
     println("");
+    println("Next steps:");
     println(`  cd ${name}`);
     println("  positron run");
 }
 
 function cmdBuild(): void {
-    println("Building (release)…");
-    let rc = runCmd(`${tachyonBin()} build --release`);
-    if (rc != 0) { exit(rc); }
-    println("Built.");
+    requireProject();
+    exit(runCmd(`${tachyonBin()} build --release`));
 }
 
 function cmdRun(): void {
+    let name = requireProject();
     let rc = runCmd(`${tachyonBin()} build --release`);
     if (rc != 0) { exit(rc); }
-    let name = projectName();
-    if (name.len() == 0L) {
-        eprintln("no Tachyon.toml here — run inside a project (or 'positron new').");
+    let bin = `./target/release/${name}`;
+    if (!fileExists(bin)) {
+        eprintln(`error: build output not found: ${bin}`);
         exit(1);
     }
-    let bin = `./target/release/${name}`;
-    if (!fileExists(bin)) { eprintln(`built binary not found: ${bin}`); exit(1); }
-    println(`Running ${name} — close the window to stop.`);
+    println(`Running ${name}`);
     exit(runCmd(bin));
 }
 
@@ -165,10 +194,9 @@ ${iconKey}  <key>NSAppTransportSecurity</key>
 }
 
 function cmdPack(a: Vec<string>): void {
+    let proj = requireProject();
     let rc = runCmd(`${tachyonBin()} build --release`);
     if (rc != 0) { exit(rc); }
-    let proj = projectName();
-    if (proj.len() == 0L) { eprintln("no Tachyon.toml here."); exit(1); }
 
     let name = proj;
     let sign = "";
@@ -185,59 +213,107 @@ function cmdPack(a: Vec<string>): void {
     }
 
     let bin = `./target/release/${proj}`;
-    if (!fileExists(bin)) { eprintln(`binary not found: ${bin}`); exit(1); }
+    if (!fileExists(bin)) {
+        eprintln(`error: build output not found: ${bin}`);
+        exit(1);
+    }
 
     let app = `${out}/${name}.app`;
     let macos = `${app}/Contents/MacOS`;
     let res = `${app}/Contents/Resources`;
-    println(`Packaging ${app}…`);
-    runCmd(`rm -rf "${app}"`);
-    runCmd(`mkdir -p "${macos}" "${res}"`);
-    runCmd(`cp "${bin}" "${macos}/${name}-bin"`);
-    runCmd(`chmod +x "${macos}/${name}-bin"`);
+
+    println(`Packaging ${name}.app`);
+    runQuiet(`rm -rf "${app}"`);
+    if (runQuiet(`mkdir -p "${macos}" "${res}"`) != 0) {
+        eprintln(`error: cannot write to ${out}`);
+        exit(1);
+    }
+    if (runQuiet(`cp "${bin}" "${macos}/${name}-bin"`) != 0) {
+        eprintln("error: failed to copy the executable into the bundle");
+        exit(1);
+    }
+    runQuiet(`chmod +x "${macos}/${name}-bin"`);
     writeFile(`${macos}/${name}`, launcherScript(name));
-    runCmd(`chmod +x "${macos}/${name}"`);
+    runQuiet(`chmod +x "${macos}/${name}"`);
 
-    // auto-bundle app assets that sit next to the project
-    if (fileExists("server.js")) { runCmd(`cp "server.js" "${res}/"`); }
-    if (isDir("web")) { runCmd(`cp -R "web" "${res}/"`); }
-    if (isDir("public")) { runCmd(`cp -R "public" "${res}/"`); }
+    // Bundle the app's assets, when present.
+    if (fileExists("server.js")) {
+        runQuiet(`cp "server.js" "${res}/"`);
+        println("  added server.js");
+    }
+    if (isDir("web")) {
+        runQuiet(`cp -R "web" "${res}/"`);
+        println("  added web");
+    }
+    if (isDir("public")) {
+        runQuiet(`cp -R "public" "${res}/"`);
+        println("  added public");
+    }
 
-    // bundle node for node-based apps so the .app is self-contained
+    // Bundle a Node runtime so the app is self-contained.
     let needsNode = fileExists("server.js") || isDir("web");
     if (needsNode) {
-        runCmd(`mkdir -p "${res}/bin"`);
-        let nrc = runCmd(`cp "$(command -v node)" "${res}/bin/node"`);
-        if (nrc != 0) { println("  note: node not found on PATH; not bundled"); }
+        runQuiet(`mkdir -p "${res}/bin"`);
+        if (runQuiet(`cp "$(command -v node)" "${res}/bin/node"`) == 0) {
+            println("  added node runtime");
+        } else {
+            eprintln("warning: node was not found on PATH and was not bundled");
+        }
     }
 
     let iconKey = "";
     if (icon.len() > 0L) {
-        runCmd(`cp "${icon}" "${res}/AppIcon.icns"`);
-        iconKey = "  <key>CFBundleIconFile</key><string>AppIcon</string>\n";
+        if (runQuiet(`cp "${icon}" "${res}/AppIcon.icns"`) == 0) {
+            iconKey = "  <key>CFBundleIconFile</key><string>AppIcon</string>\n";
+            println("  added icon");
+        } else {
+            eprintln(`warning: icon not found: ${icon}`);
+        }
     }
     writeFile(`${app}/Contents/Info.plist`, infoPlist(name, iconKey));
 
     if (sign.len() > 0L) {
-        println(`Signing (${sign})…`);
-        if (needsNode) { runCmd(`codesign --force --sign "${sign}" "${res}/bin/node"`); }
-        runCmd(`codesign --force --sign "${sign}" "${macos}/${name}-bin"`);
-        runCmd(`codesign --force --sign "${sign}" "${app}"`);
+        if (needsNode) { runQuiet(`codesign --force --sign "${sign}" "${res}/bin/node"`); }
+        runQuiet(`codesign --force --sign "${sign}" "${macos}/${name}-bin"`);
+        let src = runQuiet(`codesign --force --sign "${sign}" "${app}"`);
+        if (src != 0) {
+            eprintln("error: code signing failed");
+            exit(1);
+        }
+        if (sign == "-") {
+            println("  signed (ad-hoc)");
+        } else {
+            println(`  signed with identity ${sign}`);
+        }
     }
-    println(`Done: ${app}`);
+
+    let shown = app;
+    if (out == ".") { shown = `${name}.app`; }
+    println(`Created ${shown}`);
 }
 
 function help(): void {
-    println("positron — create, run, and package Positron desktop apps");
+    println("positron - create, build, run, and package Positron desktop apps");
     println("");
-    println("Usage:");
-    println("  positron new <name> [--node]   scaffold a new app (--node adds a Node server)");
-    println("  positron build                 compile the current app (release)");
-    println("  positron run                   build, then open the app window");
-    println("  positron pack [opts]           build a macOS .app (auto-bundles server.js/web + node)");
-    println("  positron version");
+    println("USAGE:");
+    println("    positron <command> [options]");
     println("");
-    println("pack options:  --name <title>   --sign <identity>   --icon <file.icns>   --out <dir>");
+    println("COMMANDS:");
+    println("    new <name> [--node]    Create a new app. --node adds a Node.js server.");
+    println("    build                  Compile the current app in release mode.");
+    println("    run                    Compile the app and open its window.");
+    println("    pack [options]         Package the app as a macOS .app bundle.");
+    println("    version                Print the version.");
+    println("    help                   Print this message.");
+    println("");
+    println("PACK OPTIONS:");
+    println("    --name <title>         Bundle name. Defaults to the package name.");
+    println("    --sign <identity>      Code-sign identity. Use '-' for ad-hoc signing.");
+    println("    --icon <file.icns>     Application icon.");
+    println("    --out <dir>            Output directory. Defaults to the current directory.");
+    println("");
+    println("Assets next to the project (server.js, web, public) and a node runtime");
+    println("are bundled automatically when packaging.");
 }
 
 function main(): void {
@@ -250,5 +326,9 @@ function main(): void {
     else if (cmd == "pack") { cmdPack(a); }
     else if (cmd == "help" || cmd == "--help" || cmd == "-h") { help(); }
     else if (cmd == "version" || cmd == "--version" || cmd == "-v") { println(`positron ${VERSION}`); }
-    else { eprintln(`unknown command: ${cmd}`); help(); exit(1); }
+    else {
+        eprintln(`error: unknown command '${cmd}'`);
+        eprintln("       run 'positron help' to see the available commands");
+        exit(1);
+    }
 }
