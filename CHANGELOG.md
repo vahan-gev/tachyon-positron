@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1
+
+- Windows packager now embeds `-Icon` into the `.exe` via `rcedit` (when it's on
+  PATH), instead of only copying the `.ico` alongside — so the executable
+  actually shows the icon. Falls back to a warning if `rcedit` is absent. (The
+  macOS and Linux packagers already applied icons to the bundle.)
+
 ## 0.2.0
 
 - Cross-platform packaging: `tools/pack-linux.sh` (AppDir → `.AppImage`, or a

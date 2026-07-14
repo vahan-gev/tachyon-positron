@@ -15,7 +15,10 @@
 .PARAMETER Node       Bundle the current node.exe (self-contained).
 .PARAMETER WebView2Loader  Path to WebView2Loader.dll to bundle (needed at
                       runtime; the SDK ships it under runtimes\win-x64\native).
-.PARAMETER Icon       .ico file to copy alongside the app.
+.PARAMETER Icon       .ico file for the app. It is embedded into the .exe with
+                      rcedit if rcedit(.exe) is on PATH (install via scoop/choco
+                      or from github.com/electron/rcedit); otherwise it is just
+                      bundled alongside and a warning is printed.
 .PARAMETER Sign       Code-sign with signtool. Pass a certificate subject name
                       (uses /n) or thumbprint (uses /sha1). Requires the Windows
                       SDK signtool.exe on PATH.
@@ -69,7 +72,22 @@ if ($WebView2Loader -ne "") {
   Write-Warning "no -WebView2Loader given; the app needs WebView2Loader.dll beside the .exe at runtime"
 }
 
-if ($Icon -ne "") { Copy-Item $Icon $dir -Force }
+# icon — bundle it and embed it into the .exe (Windows keeps the icon inside
+# the PE binary, so a copy alongside isn't enough; rcedit injects it)
+if ($Icon -ne "") {
+  if (-not (Test-Path $Icon)) { throw "icon not found: $Icon" }
+  Copy-Item $Icon $dir -Force
+  $rcedit = Get-Command rcedit -ErrorAction SilentlyContinue
+  if (-not $rcedit) { $rcedit = Get-Command rcedit.exe -ErrorAction SilentlyContinue }
+  if (-not $rcedit) { $rcedit = Get-Command rcedit-x64.exe -ErrorAction SilentlyContinue }
+  if ($rcedit) {
+    Write-Host "   + embedding icon into $Name.exe"
+    & $rcedit.Source $exe --set-icon $Icon
+    if ($LASTEXITCODE -ne 0) { throw "rcedit failed to set the icon (exit $LASTEXITCODE)" }
+  } else {
+    Write-Warning "icon bundled but not embedded: rcedit not found on PATH. Install it (scoop install rcedit, choco install rcedit, or github.com/electron/rcedit) to set the .exe icon."
+  }
+}
 
 # launcher that sets the working dir + PATH (so bundled node and relative
 # asset paths resolve), then starts the app without a console window

@@ -102,8 +102,14 @@ pwsh tools/pack-windows.ps1 `
   -Bin target/release/my-app.exe -Name "My App" `
   -Resources web,server.js `
   -Node -WebView2Loader "C:\path\to\WebView2Loader.dll" `
+  -Icon app.ico `            # embedded into the .exe via rcedit (if on PATH)
   -Sign "My Cert Subject"     # or a 40-char cert thumbprint
 ```
+
+Icons: `--icon` sets the bundle icon on macOS (`.icns` via `Info.plist`) and
+Linux (`.png` via the `.desktop` entry). On Windows the icon is embedded into
+the `.exe` with [`rcedit`](https://github.com/electron/rcedit) — install it
+(`scoop install rcedit` / `choco install rcedit`) so it's on PATH.
 
 > The macOS packager (incl. `--sign`) is verified end-to-end. The Linux packager
 > is verified through AppDir assembly; the `.AppImage` step and the Windows
