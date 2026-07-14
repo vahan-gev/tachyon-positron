@@ -15,6 +15,11 @@
 #   --node                bundle the current `node` into Resources/bin (so the
 #                         app can run Node without a system install)
 #   --icon FILE.icns      app icon
+#   --sign IDENTITY       code-sign the bundle with `codesign`. Pass a Developer
+#                         ID identity (e.g. "Developer ID Application: You (TEAM)")
+#                         for distribution, or "-" for ad-hoc signing (runs
+#                         locally without a certificate; still Gatekeeper-flagged
+#                         on other Macs). See notes at the bottom for notarization.
 #   --out DIR             output directory (default: current directory)
 #
 # The generated launcher puts Resources/bin on PATH and cd's into Resources
@@ -22,7 +27,7 @@
 # the same as during development.
 set -euo pipefail
 
-BIN="" NAME="" ID="" ICON="" OUT="."
+BIN="" NAME="" ID="" ICON="" OUT="." SIGN=""
 NODE=0
 RESOURCES=()
 
@@ -34,6 +39,7 @@ while [ $# -gt 0 ]; do
     --resources) RESOURCES+=("$2"); shift 2;;
     --node) NODE=1; shift;;
     --icon) ICON="$2"; shift 2;;
+    --sign) SIGN="$2"; shift 2;;
     --out) OUT="$2"; shift 2;;
     *) echo "unknown option: $1" >&2; exit 1;;
   esac
@@ -124,4 +130,23 @@ $ICONKEY
 </plist>
 PLIST
 
+# code signing — sign inner executables first, then the bundle
+if [ -n "$SIGN" ]; then
+  echo "==> signing with identity: $SIGN"
+  [ -f "$RES/bin/node" ] && codesign --force --timestamp=none --sign "$SIGN" "$RES/bin/node"
+  codesign --force --timestamp=none --sign "$SIGN" "$MACOS/$NAME-bin"
+  codesign --force --timestamp=none --sign "$SIGN" "$APP"
+  codesign --verify --deep --strict "$APP" && echo "   signature verified"
+fi
+
 echo "==> done: $APP"
+
+# --- Notes on distribution -------------------------------------------------
+# Ad-hoc (--sign -) runs on your Mac but is still Gatekeeper-flagged elsewhere.
+# For distribution outside the App Store, sign with a Developer ID identity and
+# notarize:
+#   codesign --deep --force --options runtime --timestamp \
+#     --sign "Developer ID Application: NAME (TEAMID)" "App Name.app"
+#   ditto -c -k --keepParent "App Name.app" "App Name.zip"
+#   xcrun notarytool submit "App Name.zip" --apple-id ... --team-id ... --wait
+#   xcrun stapler staple "App Name.app"

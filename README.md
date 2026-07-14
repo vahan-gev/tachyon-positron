@@ -55,27 +55,59 @@ pwServe(title, w, h, cmd, host, port, timeoutMs): bool
 Sidecar processes run in their own process group and are terminated when the
 app exits, so an `npm start` → `node` subtree doesn't leak.
 
-## Packaging (macOS)
+## Packaging
 
-`tools/pack-macos.sh` wraps a compiled program into a double-clickable `.app`,
-optionally bundling the `node` runtime and your web assets so the result is
-self-contained:
+Each platform has a packager under `tools/` that wraps a compiled program into
+a distributable app, optionally bundling the `node` runtime and your web assets
+so the result is self-contained. Run the packager on the platform you built the
+binary on. They share the same flags (`--bin`, `--name`, `--resources`,
+`--node`, `--icon`).
+
+**macOS** → a double-clickable `.app`:
 
 ```bash
 tachyon build --release
-
 tools/pack-macos.sh \
   --bin target/release/my-app \
   --name "My App" \
-  --resources web \
-  --resources server.js \
-  --node                      # bundle the current `node` into the app
+  --resources web --resources server.js \
+  --node \
+  --sign -                    # ad-hoc; or a "Developer ID Application: …" identity
 ```
 
-The generated launcher puts the bundled `node` on `PATH` and sets the working
-directory to `Contents/Resources`, so bundled `node` and relative asset paths
-resolve exactly as they do in development. The `Info.plist` permits HTTP to
-localhost (App Transport Security) so a local server loads inside the app.
+The launcher puts the bundled `node` on `PATH` and sets the working directory to
+`Contents/Resources`, so bundled `node` and relative paths resolve as in
+development. The `Info.plist` permits HTTP to localhost so a local server loads.
+`--sign -` signs ad-hoc (runs locally); pass a Developer ID identity for
+distribution — see the notarization notes at the end of `tools/pack-macos.sh`.
+
+**Linux** → an AppDir, turned into a single-file `.AppImage` if `appimagetool`
+is installed, otherwise a `.tar.gz`:
+
+```bash
+tachyon build --release
+tools/pack-linux.sh \
+  --bin target/release/my-app \
+  --name "My App" \
+  --resources web --resources server.js \
+  --node
+```
+
+**Windows** → a self-contained folder + `.zip`, with optional `signtool`
+signing (run in PowerShell):
+
+```powershell
+tachyon build --release
+pwsh tools/pack-windows.ps1 `
+  -Bin target/release/my-app.exe -Name "My App" `
+  -Resources web,server.js `
+  -Node -WebView2Loader "C:\path\to\WebView2Loader.dll" `
+  -Sign "My Cert Subject"     # or a 40-char cert thumbprint
+```
+
+> The macOS packager (incl. `--sign`) is verified end-to-end. The Linux packager
+> is verified through AppDir assembly; the `.AppImage` step and the Windows
+> packager have not been run on-target yet.
 
 ## Example
 

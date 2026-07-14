@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0
+
+- Cross-platform packaging: `tools/pack-linux.sh` (AppDir → `.AppImage`, or a
+  `.tar.gz` fallback) and `tools/pack-windows.ps1` (self-contained folder +
+  `.zip`), alongside the existing `tools/pack-macos.sh`. All share the same
+  flags and can bundle the `node` runtime + web assets.
+- Code signing: `--sign` for `pack-macos.sh` (`codesign`, incl. ad-hoc `-`) and
+  `-Sign` for `pack-windows.ps1` (`signtool`). macOS signing is verified;
+  notarization steps are documented in the script.
+
 ## 0.1.0
 
 Initial release.
