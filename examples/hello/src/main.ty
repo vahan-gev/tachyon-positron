@@ -1,0 +1,12 @@
+// Positron demo: start a Node.js server and show it in a native window.
+// Run from this directory (see run.sh) so `node server.js` resolves.
+
+import positron.app;
+
+function main(): void {
+    let ok = pwServe("Positron × Node", 900, 640,
+                     "node server.js", "127.0.0.1", 7777, 30000);
+    if (!ok) {
+        println("failed to start the Node server");
+    }
+}

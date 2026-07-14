@@ -1,0 +1,75 @@
+// Positron — run web apps (including a Node.js backend) inside a native window.
+//
+// The public surface is a small set of `pw*` functions. A typical app either
+// shows local HTML, or — the interesting case — starts a server process and
+// points the webview at it:
+//
+//   import positron.app;
+//
+//   function main(): void {
+//     // start a Node server, wait for it, and show it in a native window
+//     pwServe("My App", 1100, 780, "cd web && npm start", "127.0.0.1", 3000);
+//   }
+//
+// Everything is single-window and main-thread; pwRun() blocks until the window
+// closes, at which point any spawned server processes are terminated.
+
+// ---- window ----
+
+// Create the window + webview. Call before loading anything.
+function pwInit(title: string, width: int, height: int): void {
+    pn_window(title, width, height);
+}
+
+// Turn on the Web Inspector (right-click > Inspect Element). Call before pwInit.
+function pwDevTools(): void { pn_devtools(1); }
+
+function pwLoadURL(url: string): void { pn_load_url(url); }
+function pwLoadHTML(html: string): void { pn_load_html(html); }
+function pwTitle(title: string): void { pn_set_title(title); }
+
+// Evaluate JavaScript inside the current page.
+function pwEval(js: string): void { pn_eval(js); }
+
+// Enter the native event loop. Blocks until the window is closed.
+function pwRun(): void { pn_run(); }
+
+// Close the window and quit the app.
+function pwQuit(): void { pn_quit(); }
+
+// ---- sidecar processes ----
+
+// Start `cmd` (via /bin/sh) as a child process; returns its pid, or -1.
+// The child runs in its own process group and is killed when the app exits,
+// so a `npm start` -> node subtree is cleaned up with the window.
+function pwSpawn(cmd: string): int { return pn_spawn(cmd); }
+
+// Terminate a process (and its group) started with pwSpawn.
+function pwStop(pid: int): void { pn_kill(pid); }
+
+// Block until host:port accepts a connection (server is up), or timeout.
+function pwWaitPort(host: string, port: int, timeoutMs: int): bool {
+    return pn_wait_port(host, port, timeoutMs) != 0;
+}
+
+// Directory containing the running executable — use it to resolve paths to
+// assets bundled next to the binary (e.g. inside a packaged .app).
+function pwResourceDir(): string { return pn_exec_dir(); }
+
+// ---- convenience ----
+
+// Start a server command, wait for its port to come up, then show it in a
+// native window and run until closed. Returns false if the server never
+// became reachable within `timeoutMs`. This is the one-call path for running
+// a Node/Next/Express (or any HTTP) app in a native window.
+function pwServe(title: string, width: int, height: int,
+                 cmd: string, host: string, port: int, timeoutMs: int): bool {
+    let pid = pwSpawn(cmd);
+    if (pid < 0) { return false; }
+    let up = pwWaitPort(host, port, timeoutMs);
+    if (!up) { pwStop(pid); return false; }
+    pwInit(title, width, height);
+    pwLoadURL(`http://${host}:${port}`);
+    pwRun();
+    return true;
+}

@@ -1,0 +1,11 @@
+[package]
+name = "positron"
+version = "0.1.0"
+edition = "2026"
+repo = "git+https://github.com/vahan-gev/tachyon-positron"
+
+[build]
+native-macos = ["native/positron_macos.m"]
+link-macos = ["-framework Cocoa", "-framework WebKit"]
+native-linux = ["native/positron_posix.c"]
+native-windows = ["native/positron_posix.c"]

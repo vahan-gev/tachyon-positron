@@ -1,0 +1,21 @@
+// Positron — native shim FFI surface.
+// Implemented per platform in native/ (macOS: Cocoa + WebKit / WKWebView).
+// `string` maps to `const char*`; `int` maps to `int32_t`.
+
+// window + webview
+extern function pn_window(title: string, w: int, h: int): void;
+extern function pn_devtools(on: int): void;      // call before pn_window
+extern function pn_load_url(url: string): void;
+extern function pn_load_html(html: string): void;
+extern function pn_set_title(t: string): void;
+extern function pn_eval(js: string): void;       // run JS in the page
+extern function pn_run(): void;                  // enter the event loop (blocks)
+extern function pn_quit(): void;
+
+// sidecar processes (e.g. a Node.js server behind the window)
+extern function pn_spawn(cmd: string): int;      // returns pid, or -1
+extern function pn_kill(pid: int): void;
+extern function pn_wait_port(host: string, port: int, timeout_ms: int): int;
+
+// where the running executable lives (for locating bundled assets)
+extern function pn_exec_dir(): string;

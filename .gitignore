@@ -1,0 +1,4 @@
+target/
+Tachyon.lock
+examples/*/target/
+examples/*/Tachyon.lock
